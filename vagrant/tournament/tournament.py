@@ -3,25 +3,22 @@
 # tournament.py -- implementation of a Swiss-system tournament
 #
 
-import psycopg2
-
-
-def connect():
-    """Connect to the PostgreSQL database.  Returns a database connection."""
-    return psycopg2.connect("dbname=tournament")
-
+from tournament_util import *
 
 def deleteMatches():
     """Remove all the match records from the database."""
-
+    query('delete from matches *')
 
 def deletePlayers():
     """Remove all the player records from the database."""
-
+    query('delete from players *')
 
 def countPlayers():
     """Returns the number of players currently registered."""
-
+    results = query('select count(*) from players')
+    count = results[0][0]
+    log('number of players: %s' % count)
+    return count
 
 def registerPlayer(name):
     """Adds a player to the tournament database.
@@ -32,7 +29,7 @@ def registerPlayer(name):
     Args:
       name: the player's full name (need not be unique).
     """
-
+    query("insert into players values (default, %s)", (name,))
 
 def playerStandings():
     """Returns a list of the players and their win records, sorted by wins.
@@ -47,7 +44,7 @@ def playerStandings():
         wins: the number of matches the player has won
         matches: the number of matches the player has played
     """
-
+    return standings()
 
 def reportMatch(winner, loser):
     """Records the outcome of a single match between two players.
@@ -56,7 +53,7 @@ def reportMatch(winner, loser):
       winner:  the id number of the player who won
       loser:  the id number of the player who lost
     """
- 
+    query("insert into matches values (default, %s, %s)", (winner, loser))
  
 def swissPairings():
     """Returns a list of pairs of players for the next round of a match.

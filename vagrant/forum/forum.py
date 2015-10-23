@@ -10,6 +10,8 @@ import cgi
 from wsgiref.simple_server import make_server
 from wsgiref import util
 
+import bleach
+
 # HTML template for the forum page
 HTML_WRAP = '''\
 <!DOCTYPE html>
@@ -52,9 +54,10 @@ def View(env, resp):
     # get posts from database
     posts = forumdb.GetAllPosts()
     # send results
-    headers = [('Content-type', 'text/html')]
+    headers = [('Content-type', 'text/html;charset=utf-8')]
     resp('200 OK', headers)
-    return [HTML_WRAP % ''.join(POST % p for p in posts)]
+    result = [HTML_WRAP % ''.join(POST % p for p in posts)]
+    return result
 
 ## Request handler for posting - inserts to database
 def Post(env, resp):
