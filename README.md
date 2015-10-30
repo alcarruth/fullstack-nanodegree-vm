@@ -3,9 +3,9 @@
 
 ## Quick Start
 
-> `$ git clone git@github.com:alcarruth/fullstack-vm.git`
+> `$ git clone git@github.com:alcarruth/fullstack-nanodegree-vm.git`
 >
-> `$ cd fullstack-vm/`
+> `$ cd fullstack-nanodegree-vm`
 >
 > `$ vagrant up`
 >
