@@ -1,5 +1,12 @@
 -- Table definitions for the tournament project.
 
+-- We start with a clean slate
+--
+DROP DATABASE IF EXISTS tournament;
+CREATE DATABASE tournament;
+\c tournament
+
+
 -- table 'players_plus'
 --
 -- This table is called 'players_plus' because it is contains
@@ -14,9 +21,9 @@
 -- In order to read from the roster of players one should select from
 -- the view 'players' (see below).
 --
-create table players_plus (
-       id serial primary key,
-       name text
+CREATE TABLE players_plus (
+       id SERIAL PRIMARY KEY,
+       name TEXT NOT NULL
        );
 
 
@@ -26,10 +33,11 @@ create table players_plus (
 -- Since (winner, loser) is the primary key, rematches are 
 -- automatically rejected by the database.
 --
-create table matches (
-       winner integer references players_plus(id),
-       loser integer references players_plus(id),
-       primary key (winner, loser)
+CREATE TABLE matches (
+       winner INTEGER REFERENCES players_plus(id) ON DELETE CASCADE,
+       loser INTEGER REFERENCES players_plus(id) ON DELETE CASCADE,
+       PRIMARY KEY (winner, loser),
+       CHECK (winner <> loser)
        );
 
 
@@ -45,8 +53,8 @@ create table matches (
 -- referenced players(id) and there was no player registered with dummy 
 -- born loser's id.
 --
-create view players as
-       select * from players_plus where id>0;
+CREATE VIEW players AS
+       SELECT * FROM players_plus WHERE id>0;
 
 
 -- view 'wins'
@@ -58,10 +66,10 @@ create view players as
 -- the case, the 'order by' clause is superfluous since 'results'
 -- does its own ordering.
 --
-create view wins as
-       select winner as id, count(*) as wins 
-       from matches group by winner
-       order by wins desc;
+CREATE VIEW wins AS
+       SELECT winner AS id, COUNT(*) AS wins 
+       FROM matches GROUP BY winner
+       ORDER BY wins DESC;
 
 
 -- view 'results'
@@ -86,10 +94,10 @@ create view wins as
 -- The swissPairings2() method does the shuffling in python
 -- and does not rely on this randomness here.
 --
-create view results as
-       select players.id, name, coalesce(wins,0) as wins
-       from players left join wins on players.id = wins.id
-       order by wins desc, random();
+CREATE VIEW results AS
+       SELECT players.id, name, COALESCE(wins,0) AS wins
+       FROM players LEFT JOIN wins ON players.id = wins.id
+       ORDER BY wins DESC, random();
 
 
 -- view 'rounds_played'
@@ -99,8 +107,8 @@ create view results as
 -- As far as I know this is only used to provide the 'matches'
 -- field in the 'standings' view (see below).
 --
-create view rounds_played as
-       select coalesce(max(wins),0) as matches from wins;
+CREATE VIEW rounds_played AS
+       SELECT COALESCE(MAX(wins),0) AS matches FROM wins;
 
 
 -- view 'standings'
@@ -115,6 +123,6 @@ create view rounds_played as
 -- not be viewed except _between_ rounds.  Is that a problem?
 -- I don't know but I don't like it.
 --
-create view standings as
-       select id, name, wins, matches 
-       from results, rounds_played;
+CREATE VIEW standings AS
+       SELECT id, name, wins, matches 
+       FROM results, rounds_played;

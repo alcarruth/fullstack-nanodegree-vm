@@ -49,8 +49,17 @@ class Tournament:
             self.show('standings')
 
     def connect(self):
-        """Connect to the PostgreSQL database.  Returns a database connection."""
-        return psycopg2.connect("dbname=" + self.dbname)
+        """Connect to the PostgreSQL database.  Returns a pair containing a
+        database connection, and a cursor."""
+
+        try:
+            db = psycopg2.connect("dbname=" + self.dbname)
+            cursor = db.cursor()
+            return db, cursor
+
+        except:
+            print("Problem connecting to database '%s'" % self.dbname)
+
 
     def query(self, qs, content=()):
         """Open a connection to the PostgreSQL database, obtain a cursor,
@@ -68,37 +77,36 @@ class Tournament:
         ctype = type(content)
         assert ctype == tuple or ctype == list
 
-        conn = self.connect()
-        c = conn.cursor()
+        db, cursor = self.connect()
 
         # Note that we add a semi-colon here so it must not be included in
         # the qs argument.  I have a reason for doing this, but I don't think
         # it's worth attempting an explanation here !-)
-        c.execute(qs+';', content)
+        cursor.execute(qs+';', content)
 
         # Not all queries produce something to fetch.  If this one does,
         # fetch it and return it.  If it does not, we return 'None'.
         try:
-            r = c.fetchall()
+            result = cursor.fetchall()
         except:
-            r = None
+            result = None
 
         # But before we can return, we finish with the database.  Again,
         # not all interactions with the database require a commit, but we
         # don't do any harm and I don't think we lose too much by executing
         # the commit() anyway.  We waste a function call but I'm sure
         # for PostgreSQL it's a no-op.
-        conn.commit()
-        conn.close()
-        return r
+        db.commit()
+        db.close()
+
+        return result
 
     def report(self, table):
         """Generate a prettytable object for table."""
 
         # Here we don't use the query() method above because prettytable has a 
         # that will create the pretty string directly from the database cursor.
-        conn = self.connect()
-        c = conn.cursor()
+        db, cursor = self.connect()
 
         # Regarding psycopg2's cursor.execute() method we have from
         # http://initd.org/psycopg/docs/usage.html#query-parameters:
@@ -109,11 +117,11 @@ class Tournament:
         # running execute()."
 
         # grab the whole table
-        c.execute("select * from %s;" % table)
-
+        cursor.execute("SELECT * FROM %s;" % table)
+        
         # produce the prettyprint object
-        x = prettytable.from_db_cursor(c)
-        conn.close()
+        x = prettytable.from_db_cursor(cursor)
+        db.close()
 
         # Now we can set some options.  If they don't apply
         # to the current table it's no big deal.
@@ -121,6 +129,7 @@ class Tournament:
         x.align['winner'] = 'l'
         x.align['loser'] = 'l'
         x.align['id'] = 'r'
+
         return x
 
     def show(self, table):
@@ -134,7 +143,7 @@ class Tournament:
         Args:
             n: number of wins by which to select players
         """
-        xs = self.query("select id, name from standings where wins = %s", (n,))
+        xs = self.query("SELECT id, name FROM standings WHERE wins = %s", (n,))
         return xs
 
     def groupPlayers(self):
@@ -224,7 +233,7 @@ class Tournament:
             # should be easier than writing this comment !-)
 
             # maximum number of wins for any player (so far)
-            max_wins = self.query('select max(wins) from results')[0][0]
+            max_wins = self.query('SELECT MAX(wins) FROM results')[0][0]
 
             # TODO:
             # leaders is the same as the first group in the list returned
@@ -235,7 +244,7 @@ class Tournament:
             # make this query here.
 
             # group of players with the maximum number of wins so far
-            leaders = self.query("select id, name from results where wins=%s", (max_wins,))
+            leaders = self.query("SELECT id, name FROM results WHERE wins=%s", (max_wins,))
 
             done = len(leaders) == 1
 
@@ -245,7 +254,7 @@ class Tournament:
 
     def deleteMatches(self):
         """Remove all the match records from the database."""
-        self.query('delete from matches *')
+        self.query('DELETE FROM matches *')
 
     def deletePlayers(self):
         """Remove all the player records from the database."""
@@ -254,13 +263,13 @@ class Tournament:
         self.numberPlayers = 0
 
         # delete all players from the database
-        self.query('delete from players_plus *')
+        self.query('DELETE FROM players_plus *')
 
         # but then add back the dummy 'bye' player with id 0
-        self.query("insert into players_plus values (0, %s)", ('_',))
+        self.query("INSERT INTO players_plus VALUES (0, %s)", ('_',))
 
         # reset the serial generator for id to 1
-        self.query("alter sequence players_plus_id_seq restart with 1")
+        self.query("ALTER SEQUENCE players_plus_id_seq RESTART WITH 1")
 
     def countPlayers(self):
         """Returns the number of players currently registered."""
@@ -268,7 +277,7 @@ class Tournament:
         # commented out below but it just didn't seem to make sense 
         # since the answer is already at hand.
         return self.numberPlayers
-        # return self.query('select count(*) from players')[0][0]
+        # return self.query('SELECT COUNT(*) FROM players')[0][0]
 
     def registerPlayer(self,name):
         """Adds a player to the tournament database.
@@ -280,7 +289,7 @@ class Tournament:
             name: the player's full name (need not be unique).
         """
         self.numberPlayers += 1
-        self.query("insert into players_plus values (default, %s)", (name,))
+        self.query("INSERT INTO players_plus VALUES (DEFAULT, %s)", (name,))
 
     def playerStandings(self):
         """Returns a list of the players and their win records, sorted by wins.
@@ -295,7 +304,7 @@ class Tournament:
         wins: the number of matches the player has won
         matches: the number of matches the player has played
         """
-        return self.query('select * from standings')
+        return self.query('SELECT * FROM standings')
 
     def reportMatch(self, winner, loser):
         """Records the outcome of a single match between two players.
@@ -307,7 +316,7 @@ class Tournament:
         # TODO:
         # implement logging() method and use that.
         #print "winner: %s, loser: %s" % (winner, loser)
-        self.query("insert into matches values (%s, %s)", (winner, loser))
+        self.query("INSERT INTO matches VALUES (%s, %s)", (winner, loser))
  
     def rankPlayers(self):
         """Returns a list of all players, sorted by the number of matches
@@ -318,8 +327,8 @@ class Tournament:
         # Note: rankPlayers() is used by swissPairings1() but not by
         # swissPairings2().
 
-        xs = self.query('select id, name from results')
-        #xs = self.query('select id, name from results order by wins desc')
+        xs = self.query('SELECT id, name FROM results')
+        #xs = self.query('SELECT id, name FROM results ORDER BY wins DESC')
         # add a dummy bye player if number of players is odd
         # (that's different than saying 'number of odd players' !-)
         if self.numberPlayers % 2:
@@ -336,15 +345,14 @@ class Tournament:
         # swissPairings2().  It is an inefficient way to go and should
         # be done away with.
 
-        # the id's for the two players
-        p1 = pair[0]
-        p2 = pair[2]
-
         return self.query("""
-        select winner, loser from matches
-        where winner=%s and loser=%s
-        or winner=%s and loser=%s
-        """, (p1, p2, p2, p1))
+        SELECT winner, loser FROM matches
+        WHERE winner=%(p1)s AND loser=%(p2)s
+        OR winner=%(p2)s AND loser=%(p1)s
+        """, {
+            p1: pair[0], 
+            p2: pair[2] 
+        })
 
     def swissPairings(self):
         if self.pairing_algorithm == 1:
@@ -419,7 +427,7 @@ class Tournament:
         # The set is symmetric in that ((a,b) in d)  iff  ((b,a) in d).
 
         d = {}
-        for x in self.query('select * from matches'):
+        for x in self.query('SELECT * FROM matches'):
             d[x] = True
             d[(x[1],x[0])] = True
 

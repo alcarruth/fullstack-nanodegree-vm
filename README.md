@@ -3,10 +3,11 @@
 
 ## Quick Start
 
-This quick start assumes that you have virtualbox and vagrant installed
-on your machine.  There is nothing in the tournament code that requires
-either virtualbox or vagrant so if you run linux and have PostgreSQL
-installed you can probably run it anyway, at least I did !-)
+This quick start assumes that you have virtualbox and vagrant
+installed on your machine.  There is nothing in the tournament code
+that requires either virtualbox or vagrant so if you run linux and
+have PostgreSQL installed you can probably run it anyway, at least I
+did !-)
 
 But for the virtual machine case, proceed as follows:
 
@@ -23,6 +24,11 @@ as user `vagrant`.  At the new vm prompt enter the following:
 
 > `$ cd /vagrant/tournament`
 >
+> `$ psql -f tournament.sql
+
+This will create the `tournament` database its tables and views.
+Then you can run the following:
+
 > `$ ./tournament_test.py`
 >
 > `$ ./tournament_demo.py`
@@ -58,15 +64,14 @@ pretty well "in practice".
 ## Directory Structure
 
 All files for project P2 are contained within the `vagrant/tournament`
-directory.  There are two SQL files:
+directory.  There is one SQL file:
 
  * `tournament.sql`
- * `tournament_reset.sql`
 
-These are used to initialize the tournament database by creating the 
-tables and views used by the program; and to reset the database by dropping
-the tables and views. These can be executed from the psql command line with 
-the \i command.
+This is used to initialize the tournament database by creating the database,
+tables and views used by the program. This can be done from the bash prompt:
+
+> `$ psql -f tournament.sql
 
 There are three tournament python files:
 
