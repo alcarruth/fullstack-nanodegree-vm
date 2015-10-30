@@ -21,21 +21,34 @@ import prettytable
 
 class Tournament:
 
-    def __init__(self, names=[], display=False, pairing_algorithm=2):
+    def __init__(self, name, players=[], display=False, pairing_algorithm=2):
         """Create a new instance of the Tournament class.
         
         Args:
-            names: list of players to be initally registered
+            name: a name for the tournament
+            players: list of players to be initally registered
             display: boolean to print a pretty table of initial standings
             pairing_algorithm: algorithm for pairing, 1 or 2
         """
+        self.name = name
         self.dbname="tournament" 
-        self.initDB(names, display)
+        conn = self.connect()
+        c = conn.cursor()
+        c.execute('''
+        insert into tournaments 
+        values (default, %s)
+        returning id;
+        ''', (self.name,))
+        self.ID = c.fetchall()[0][0]
+        conn.commit()
+        conn.close()
+
+        self.initDB(players, display)
         self.pairingAttempts = 0
         self.pairing_algorithm = pairing_algorithm
 
     def initDB(self, names, display=False):
-        """Initialize the database to include only players in names and no matches.
+        """Initialize the database to include only players listed and no matches.
 
         Args:
             names: list of players to be initally registered
@@ -109,7 +122,7 @@ class Tournament:
         # running execute()."
 
         # grab the whole table
-        c.execute("select * from %s;" % table)
+        c.execute("select * from %s where tournament = %s;" % (table, self.ID))
 
         # produce the prettyprint object
         x = prettytable.from_db_cursor(c)
@@ -134,7 +147,11 @@ class Tournament:
         Args:
             n: number of wins by which to select players
         """
-        xs = self.query("select id, name from standings where wins = %s", (n,))
+        xs = self.query("""
+        select id, name from standings 
+        where wins = %s
+        and tournament = %s
+        """, (n, self.ID))
         return xs
 
     def groupPlayers(self):
@@ -224,7 +241,10 @@ class Tournament:
             # should be easier than writing this comment !-)
 
             # maximum number of wins for any player (so far)
-            max_wins = self.query('select max(wins) from results')[0][0]
+            max_wins = self.query('''
+            select max(wins) from results
+            where tournament = %s
+            ''', (self.ID,))[0][0]
 
             # TODO:
             # leaders is the same as the first group in the list returned
@@ -235,7 +255,12 @@ class Tournament:
             # make this query here.
 
             # group of players with the maximum number of wins so far
-            leaders = self.query("select id, name from results where wins=%s", (max_wins,))
+            leaders = self.query("""
+            select id, name 
+            from results 
+            where wins=%s
+            and tournament = %s
+            """, (max_wins, self.ID))
 
             done = len(leaders) == 1
 
@@ -245,7 +270,10 @@ class Tournament:
 
     def deleteMatches(self):
         """Remove all the match records from the database."""
-        self.query('delete from matches *')
+        self.query('''
+        delete from matches
+        where tournament = %s
+        ''', (self.ID,))
 
     def deletePlayers(self):
         """Remove all the player records from the database."""
@@ -254,13 +282,24 @@ class Tournament:
         self.numberPlayers = 0
 
         # delete all players from the database
-        self.query('delete from players_plus *')
+        self.query('''
+        delete from players_plus
+        where tournament = %s
+        ''', (self.ID,))
 
         # but then add back the dummy 'bye' player with id 0
-        self.query("insert into players_plus values (0, %s)", ('_',))
+        self.query("""
+        insert into players_plus 
+        values (0, %s, %s)
+        """, ('_', self.ID))
+
+        # TODO: this won't work for multiple tournaments
 
         # reset the serial generator for id to 1
-        self.query("alter sequence players_plus_id_seq restart with 1")
+        #self.query("""
+        #alter sequence players_plus_id_seq restart with 1
+        #where tournament = %s
+        #""", (self.ID,))
 
     def countPlayers(self):
         """Returns the number of players currently registered."""
@@ -268,7 +307,10 @@ class Tournament:
         # commented out below but it just didn't seem to make sense 
         # since the answer is already at hand.
         return self.numberPlayers
-        # return self.query('select count(*) from players')[0][0]
+        # return self.query('''
+        #select count(*) from players
+        #where tournament = %s
+        #''', (self.ID,))[0][0]
 
     def registerPlayer(self,name):
         """Adds a player to the tournament database.
@@ -280,7 +322,9 @@ class Tournament:
             name: the player's full name (need not be unique).
         """
         self.numberPlayers += 1
-        self.query("insert into players_plus values (default, %s)", (name,))
+        self.query("""
+        insert into players_plus values (default, %s, %s)
+        """, (name, self.ID))
 
     def playerStandings(self):
         """Returns a list of the players and their win records, sorted by wins.
@@ -295,7 +339,10 @@ class Tournament:
         wins: the number of matches the player has won
         matches: the number of matches the player has played
         """
-        return self.query('select * from standings')
+        return self.query('''
+        select id, name, wins, matches from standings
+        where tournament = %s
+        ''', (self.ID,))
 
     def reportMatch(self, winner, loser):
         """Records the outcome of a single match between two players.
@@ -307,7 +354,9 @@ class Tournament:
         # TODO:
         # implement logging() method and use that.
         #print "winner: %s, loser: %s" % (winner, loser)
-        self.query("insert into matches values (%s, %s)", (winner, loser))
+        self.query("""
+        insert into matches values (%s, %s, %s)
+        """, (winner, loser, self.ID))
  
     def rankPlayers(self):
         """Returns a list of all players, sorted by the number of matches
@@ -318,7 +367,10 @@ class Tournament:
         # Note: rankPlayers() is used by swissPairings1() but not by
         # swissPairings2().
 
-        xs = self.query('select id, name from results')
+        xs = self.query('''
+        select id, name from results
+        where tournament = %s
+        ''', (self.ID,))
         #xs = self.query('select id, name from results order by wins desc')
         # add a dummy bye player if number of players is odd
         # (that's different than saying 'number of odd players' !-)
@@ -336,15 +388,12 @@ class Tournament:
         # swissPairings2().  It is an inefficient way to go and should
         # be done away with.
 
-        # the id's for the two players
-        p1 = pair[0]
-        p2 = pair[2]
-
         return self.query("""
         select winner, loser from matches
-        where winner=%s and loser=%s
-        or winner=%s and loser=%s
-        """, (p1, p2, p2, p1))
+        where ((winner=%(p1)s and loser=%(p2)s)
+        or (winner=%(p2)s and loser=%(p1)s))
+        and tournament = %(ID)s
+        """ % { p1: pair[0], p2: pair[2], ID: self.ID })
 
     def swissPairings(self):
         if self.pairing_algorithm == 1:
@@ -419,7 +468,9 @@ class Tournament:
         # The set is symmetric in that ((a,b) in d)  iff  ((b,a) in d).
 
         d = {}
-        for x in self.query('select * from matches'):
+        for x in self.query('''
+        select * from matches where tournament = %s
+        ''', (self.ID,)):
             d[x] = True
             d[(x[1],x[0])] = True
 
@@ -474,7 +525,7 @@ class Tournament:
 # which we can specify with the optional 'pairing_algorithm' argument
 # to the Tournament constructor.  The default is 2.
 
-tournament = Tournament() # default
+tournament = Tournament('City') # default
 
 #tournament = Tournament(pairing_algorithm=1)
 #tournament = Tournament(pairing_algorithm=2)

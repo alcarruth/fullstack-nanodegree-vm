@@ -9,5 +9,6 @@
 -- tournament=> \i tournament.sql
 -- [...]
 
+drop table tournaments cascade;
 drop table matches cascade;
 drop table players_plus cascade;

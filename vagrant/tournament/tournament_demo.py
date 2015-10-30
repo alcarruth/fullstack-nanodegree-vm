@@ -7,7 +7,7 @@
 
 from tournament import *
 
-names = [
+players = [
     "Markov Chaney",
     "Joe Malik",
     "Mao Tsu-hsi",
@@ -25,9 +25,22 @@ names = [
     "Randy Schwartz",
     "Udacious Ulysses"
 ]
-    
-def run(players):
-    tournament.simulateTournament(players)
+
+def step(t):
+    t.simulateRound()
+
+def show():
+    t1.show('standings')
+    t2.show('standings')
+    t3.show('standings')
+
 
 if __name__ == '__main__':
-    run(names)
+    t1 = Tournament('One')
+    t2 = Tournament('Two')
+    t3 = Tournament('Three')
+    for p in players[0:6]:
+        t1.registerPlayer(p)
+        t2.registerPlayer(p)
+        t3.registerPlayer(p)
+

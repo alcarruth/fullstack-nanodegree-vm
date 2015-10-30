@@ -1,5 +1,12 @@
 -- Table definitions for the tournament project.
 
+
+create table tournaments (
+       id serial primary key,
+       name text
+       );
+
+
 -- table 'players_plus'
 --
 -- This table is called 'players_plus' because it is contains
@@ -15,8 +22,10 @@
 -- the view 'players' (see below).
 --
 create table players_plus (
-       id serial primary key,
-       name text
+       id serial,
+       name text,
+       tournament integer references tournaments(id),
+       primary key (id, tournament)
        );
 
 
@@ -27,9 +36,12 @@ create table players_plus (
 -- automatically rejected by the database.
 --
 create table matches (
-       winner integer references players_plus(id),
-       loser integer references players_plus(id),
-       primary key (winner, loser)
+       winner integer,
+       loser integer,
+       tournament integer references tournaments(id),
+       foreign key (winner, tournament) references players_plus(id, tournament),
+       foreign key (loser, tournament) references players_plus(id, tournament),
+       primary key (winner, loser, tournament)
        );
 
 
@@ -46,6 +58,7 @@ create table matches (
 -- born loser's id.
 --
 create view players as
+       -- * includes tournament
        select * from players_plus where id>0;
 
 
@@ -59,8 +72,8 @@ create view players as
 -- does its own ordering.
 --
 create view wins as
-       select winner as id, count(*) as wins 
-       from matches group by winner
+       select tournament, winner as id, count(*) as wins 
+       from matches group by tournament, winner
        order by wins desc;
 
 
@@ -87,8 +100,10 @@ create view wins as
 -- and does not rely on this randomness here.
 --
 create view results as
-       select players.id, name, coalesce(wins,0) as wins
-       from players left join wins on players.id = wins.id
+       select players.tournament, players.id, name, coalesce(wins,0) as wins
+       from players left join wins 
+       on players.tournament = wins.tournament
+       and players.id = wins.id
        order by wins desc, random();
 
 
@@ -100,7 +115,9 @@ create view results as
 -- field in the 'standings' view (see below).
 --
 create view rounds_played as
-       select coalesce(max(wins),0) as matches from wins;
+       select tournament, coalesce(max(wins),0) as matches 
+       from wins
+       group by tournament;
 
 
 -- view 'standings'
@@ -116,5 +133,6 @@ create view rounds_played as
 -- I don't know but I don't like it.
 --
 create view standings as
-       select id, name, wins, matches 
-       from results, rounds_played;
+       select results.tournament, id, name, wins, coalesce(matches, 0) as matches
+       from results left join rounds_played
+       on results.tournament = rounds_played.tournament;
