@@ -3,14 +3,24 @@
 
 ## Quick Start
 
+This quick start assumes that you have virtualbox and vagrant installed
+on your machine.  There is nothing in the tournament code that requires
+either virtualbox or vagrant so if you run linux and have PostgreSQL
+installed you can probably run it anyway, at least I did !-)
+
+But for the virtual machine case, proceed as follows:
+
 > `$ git clone git@github.com:alcarruth/fullstack-nanodegree-vm.git`
 >
-> `$ cd fullstack-nanodegree-vm`
+> `$ cd fullstack-nanodegree-vm/vagrant`
 >
 > `$ vagrant up`
 >
 > `$ vagrant ssh`
->
+
+At this point you should be logged into the virtual machine
+as user `vagrant`.  At the new vm prompt enter the following:
+
 > `$ cd /vagrant/tournament`
 >
 > `$ ./tournament_test.py`
