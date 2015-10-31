@@ -3,6 +3,10 @@
 
 # tournament_demo.py
 
+# Author: Al Carruth
+# Submitted for the Udacity Fullstack Developer Nanodegree
+# Project 2: Tournament Results
+
 # Demo program for the P2: Tournament project
 
 from tournament import *
@@ -32,15 +36,11 @@ def step(t):
 def show():
     t1.show('standings')
     t2.show('standings')
-    t3.show('standings')
-
 
 if __name__ == '__main__':
-    t1 = Tournament('One')
-    t2 = Tournament('Two')
-    t3 = Tournament('Three')
-    for p in players[0:6]:
-        t1.registerPlayer(p)
-        t2.registerPlayer(p)
-        t3.registerPlayer(p)
+    t1 = Tournament('City Tournament')
+    t2 = Tournament('State Tournament')
+    t1.simulateTournament(players[0:13])
+    #t2.simulateTournament(players[0:10])
+
 

@@ -1,8 +1,11 @@
 #!/usr/bin/python -i
 # -*- coding: utf-8 -*-
 
-# tournament.py -- implementation of a Swiss-system tournament
-#
+# tournament.py
+
+# Author: Al Carruth
+# Submitted for the Udacity Fullstack Developer Nanodegree
+# Project 2: Tournament Results
 
 import psycopg2
 
@@ -21,31 +24,29 @@ import prettytable
 
 class Tournament:
 
-    def __init__(self, name, players=[], display=False, pairing_algorithm=2):
+    def __init__(self, name, players=[], display=False):
         """Create a new instance of the Tournament class.
         
         Args:
             name: a name for the tournament
             players: list of players to be initally registered
             display: boolean to print a pretty table of initial standings
-            pairing_algorithm: algorithm for pairing, 1 or 2
         """
         self.name = name
+        self.done = False
         self.dbname="tournament" 
-        conn = self.connect()
-        c = conn.cursor()
-        c.execute('''
-        insert into tournaments 
-        values (default, %s)
-        returning id;
+        db, cursor = self.connect()
+        cursor.execute('''
+        INSERT INTO tournaments 
+        VALUES (DEFAULT, %s)
+        RETURNING ID;
         ''', (self.name,))
-        self.ID = c.fetchall()[0][0]
-        conn.commit()
-        conn.close()
+        self.ID = cursor.fetchall()[0][0]
+        db.commit()
+        db.close()
 
         self.initDB(players, display)
         self.pairingAttempts = 0
-        self.pairing_algorithm = pairing_algorithm
 
     def initDB(self, names, display=False):
         """Initialize the database to include only players listed and no matches.
@@ -63,7 +64,12 @@ class Tournament:
 
     def connect(self):
         """Connect to the PostgreSQL database.  Returns a database connection."""
-        return psycopg2.connect("dbname=" + self.dbname)
+        try:
+            db = psycopg2.connect("dbname=" + self.dbname)
+            cursor = db.cursor()
+            return db, cursor
+        except:
+            print("Unable to connect to database '%s'" % self.dbname)
 
     def query(self, qs, content=()):
         """Open a connection to the PostgreSQL database, obtain a cursor,
@@ -81,37 +87,36 @@ class Tournament:
         ctype = type(content)
         assert ctype == tuple or ctype == list
 
-        conn = self.connect()
-        c = conn.cursor()
+        db, cursor = self.connect()
 
         # Note that we add a semi-colon here so it must not be included in
         # the qs argument.  I have a reason for doing this, but I don't think
         # it's worth attempting an explanation here !-)
-        c.execute(qs+';', content)
+        cursor.execute(qs+';', content)
 
         # Not all queries produce something to fetch.  If this one does,
         # fetch it and return it.  If it does not, we return 'None'.
         try:
-            r = c.fetchall()
+            result = cursor.fetchall()
         except:
-            r = None
+            result = None
 
         # But before we can return, we finish with the database.  Again,
         # not all interactions with the database require a commit, but we
         # don't do any harm and I don't think we lose too much by executing
         # the commit() anyway.  We waste a function call but I'm sure
         # for PostgreSQL it's a no-op.
-        conn.commit()
-        conn.close()
-        return r
+        db.commit()
+        db.close()
+
+        return result
 
     def report(self, table):
         """Generate a prettytable object for table."""
 
         # Here we don't use the query() method above because prettytable has a 
         # that will create the pretty string directly from the database cursor.
-        conn = self.connect()
-        c = conn.cursor()
+        db, cursor = self.connect()
 
         # Regarding psycopg2's cursor.execute() method we have from
         # http://initd.org/psycopg/docs/usage.html#query-parameters:
@@ -122,11 +127,11 @@ class Tournament:
         # running execute()."
 
         # grab the whole table
-        c.execute("select * from %s where tournament = %s;" % (table, self.ID))
+        cursor.execute("select * from %s where tournament = %s;" % (table, self.ID))
 
         # produce the prettyprint object
-        x = prettytable.from_db_cursor(c)
-        conn.close()
+        x = prettytable.from_db_cursor(cursor)
+        db.close()
 
         # Now we can set some options.  If they don't apply
         # to the current table it's no big deal.
@@ -134,11 +139,12 @@ class Tournament:
         x.align['winner'] = 'l'
         x.align['loser'] = 'l'
         x.align['id'] = 'r'
+
         return x
 
     def show(self, table):
         """Print the prettyprint object returned by report()."""
-        print '\n' + table + ':'
+        print "\n  %s - %s" % (self.name, table.capitalize())
         print self.report(table)
 
     def playersWinning(self, n):
@@ -148,9 +154,9 @@ class Tournament:
             n: number of wins by which to select players
         """
         xs = self.query("""
-        select id, name from standings 
-        where wins = %s
-        and tournament = %s
+        SELECT id, name FROM standings 
+        WHERE wins = %s
+        AND tournament = %s
         """, (n, self.ID))
         return xs
 
@@ -182,6 +188,7 @@ class Tournament:
             groups.append(group)
             n += 1
             group = self.playersWinning(n)
+        groups.reverse()
         return groups
 
     def simulateRound(self, display=False):
@@ -192,6 +199,10 @@ class Tournament:
         Args:
             display: pretty print standings if True
         """
+        if self.done:
+            print ('Tournament complete.')
+            return
+
         for pair in self.swissPairings():
 
             # TODO:
@@ -211,7 +222,6 @@ class Tournament:
                 random.shuffle(ids)
                 self.reportMatch(ids[0], ids[1])
 
-        # Ain't it beautiful?
         if display:
             self.show('standings')
 
@@ -225,13 +235,13 @@ class Tournament:
             display: show standings initially and after each round.
         """
         self.initDB(names, display)
-        done = False
+        self.done = False
 
         # count these for an idea how well our randomized re-attempt approach
         # to the swiss pairing algorithm is working.
         self.pairingAttempts = 0
 
-        while not done:
+        while not self.done:
             self.simulateRound(display)
 
             # TODO: 
@@ -242,8 +252,8 @@ class Tournament:
 
             # maximum number of wins for any player (so far)
             max_wins = self.query('''
-            select max(wins) from results
-            where tournament = %s
+            SELECT MAX(wins) FROM results
+            WHERE tournament = %s
             ''', (self.ID,))[0][0]
 
             # TODO:
@@ -256,23 +266,21 @@ class Tournament:
 
             # group of players with the maximum number of wins so far
             leaders = self.query("""
-            select id, name 
-            from results 
-            where wins=%s
-            and tournament = %s
+            SELECT id, name 
+            FROM results 
+            WHERE wins=%s
+            AND tournament = %s
             """, (max_wins, self.ID))
 
-            done = len(leaders) == 1
+            self.done = len(leaders) == 1
 
-        print "We have a winner!"
-        print "Congratulations to %s" % leaders[0][1]
-        print "Total pairing attempts = %d" % self.pairingAttempts
+        print "\n  %s wins %s !\n" % (leaders[0][1], self.name)
 
     def deleteMatches(self):
         """Remove all the match records from the database."""
         self.query('''
-        delete from matches
-        where tournament = %s
+        DELETE FROM matches
+        WHERE tournament = %s
         ''', (self.ID,))
 
     def deletePlayers(self):
@@ -283,23 +291,23 @@ class Tournament:
 
         # delete all players from the database
         self.query('''
-        delete from players_plus
-        where tournament = %s
+        DELETE FROM players
+        WHERE tournament = %s
         ''', (self.ID,))
 
         # but then add back the dummy 'bye' player with id 0
         self.query("""
-        insert into players_plus 
-        values (0, %s, %s)
+        INSERT INTO players
+        VALUES (0, %s, %s)
         """, ('_', self.ID))
 
         # TODO: this won't work for multiple tournaments
 
         # reset the serial generator for id to 1
-        #self.query("""
-        #alter sequence players_plus_id_seq restart with 1
-        #where tournament = %s
-        #""", (self.ID,))
+        # self.query("""
+        # ALTER SEQUENCE players_id_seq RESTART WITH 1
+        # WHERE tournament = %s
+        # """, (self.ID,))
 
     def countPlayers(self):
         """Returns the number of players currently registered."""
@@ -308,9 +316,9 @@ class Tournament:
         # since the answer is already at hand.
         return self.numberPlayers
         # return self.query('''
-        #select count(*) from players
-        #where tournament = %s
-        #''', (self.ID,))[0][0]
+        # SELECT COUNT(*) FROM players
+        # WHERE tournament = %s
+        # ''', (self.ID,))[0][0]
 
     def registerPlayer(self,name):
         """Adds a player to the tournament database.
@@ -323,7 +331,7 @@ class Tournament:
         """
         self.numberPlayers += 1
         self.query("""
-        insert into players_plus values (default, %s, %s)
+        INSERT INTO players VALUES (DEFAULT, %s, %s)
         """, (name, self.ID))
 
     def playerStandings(self):
@@ -340,8 +348,8 @@ class Tournament:
         matches: the number of matches the player has played
         """
         return self.query('''
-        select id, name, wins, matches from standings
-        where tournament = %s
+        SELECT id, name, wins, matches FROM standings
+        WHERE tournament = %s
         ''', (self.ID,))
 
     def reportMatch(self, winner, loser):
@@ -355,96 +363,24 @@ class Tournament:
         # implement logging() method and use that.
         #print "winner: %s, loser: %s" % (winner, loser)
         self.query("""
-        insert into matches values (%s, %s, %s)
+        INSERT INTO matches VALUES (%s, %s, %s)
         """, (winner, loser, self.ID))
  
-    def rankPlayers(self):
-        """Returns a list of all players, sorted by the number of matches
-        they have won in descending order.  If the number of players is odd
-        we even it out by adding the bye dummy.
-        """
-
-        # Note: rankPlayers() is used by swissPairings1() but not by
-        # swissPairings2().
-
-        xs = self.query('''
-        select id, name from results
-        where tournament = %s
-        ''', (self.ID,))
-        #xs = self.query('select id, name from results order by wins desc')
-        # add a dummy bye player if number of players is odd
-        # (that's different than saying 'number of odd players' !-)
-        if self.numberPlayers % 2:
-            xs.append((0, '_'))
-        return xs
-
     def priorMatches(self, pair):
         """Returns a list of prior matches for a pair of players
 
         Args:
             pair: a pair of players as a tuple (id_1, name_1, id_2, name_2)
         """
-        # Note: rankPlayers() is used by swissPairings1() but not by
-        # swissPairings2().  It is an inefficient way to go and should
-        # be done away with.
 
         return self.query("""
-        select winner, loser from matches
-        where ((winner=%(p1)s and loser=%(p2)s)
-        or (winner=%(p2)s and loser=%(p1)s))
-        and tournament = %(ID)s
+        SELECT winner, loser FROM matches
+        WHERE ((winner=%(p1)s AND loser=%(p2)s)
+        OR (winner=%(p2)s AND loser=%(p1)s))
+        AND tournament = %(ID)s
         """ % { p1: pair[0], p2: pair[2], ID: self.ID })
 
     def swissPairings(self):
-        if self.pairing_algorithm == 1:
-            return self.swissPairings1()
-        else:
-            # There's not much point in crapping out on a
-            # bad value here.  If it's not 1 use 2.
-            return self.swissPairings2()
-
-    def swissPairings1(self):
-        """Returns a list of pairs of players for the next round of a match.
-
-        Assuming that there are an even number of players registered, each player
-        appears exactly once in the pairings.  Each player is paired with another
-        player with an equal or nearly-equal win record, that is, a player adjacent
-        to him or her in the standings.
-
-        Returns:
-            A list of tuples, each of which contains (id1, name1, id2, name2)
-            id1: the first player's unique id
-            name1: the first player's name
-            id2: the second player's unique id
-            name2: the second player's name
-        """
-        success = False
-        limit = 100
-        i = 0
-
-        while i < limit and not success:
-            xs = self.rankPlayers()
-
-            # Construct a pairing in the simplest way possible, given that
-            # the length of xs is even.  This is ensured by rankPlayers().
-            pairs = [ tuple(xs[j] + xs[j+1]) for j in range(0, len(xs), 2)]
-
-            # Pairing is successful if no two paired players have played before
-            success = all(map(lambda x: not tournament.priorMatches(x), pairs))
-
-            # TODO:
-            # The above line is really slow since it does a separate query 
-            # (via priorMatches()) for each pair in the list.
-            # Figure out how to do this in one query by constructing a where
-            # clause from the candidate pairing.  I know SQL offers sets and
-            # arrays.  Do that and test for membership or something !-)
-
-            i += 1
-        self.pairingAttempts += i
-        #print "pairing attempts = %d" % i
-        return pairs
-
-    def swissPairings2(self):
         """Returns a list of pairs of players for the next round of a match.
 
         Assuming that there are an even number of players registered, each player
@@ -469,9 +405,9 @@ class Tournament:
 
         d = {}
         for x in self.query('''
-        select * from matches where tournament = %s
+        SELECT * FROM matches WHERE tournament = %s
         ''', (self.ID,)):
-            d[x] = True
+            d[(x[0],x[1])] = True
             d[(x[1],x[0])] = True
 
         success = False
@@ -506,6 +442,15 @@ class Tournament:
             success = all(map(lambda x: (x[0],x[2]) not in d, pairs))
             i += 1
 
+        # TODO:
+        # If the limit is reached without finding a valid pairing, raise
+        # an exception and print something useful.
+
+        # print "\nd:\n" + str(d)
+        # print "\ngroups\n"
+        # for group in groups:
+        #    print group
+
         # Update the total number of pairing attempts for the tournament.
         self.pairingAttempts += i
 
@@ -521,14 +466,7 @@ class Tournament:
 # the function names required for the P2 specification to their
 # respective methods in our tournament instance.
 
-# Also, the Tournament class provides two versions of swissPairings() 
-# which we can specify with the optional 'pairing_algorithm' argument
-# to the Tournament constructor.  The default is 2.
-
 tournament = Tournament('City') # default
-
-#tournament = Tournament(pairing_algorithm=1)
-#tournament = Tournament(pairing_algorithm=2)
 
 deleteMatches = tournament.deleteMatches
 deletePlayers = tournament.deletePlayers
@@ -538,6 +476,3 @@ playerStandings = tournament.playerStandings
 reportMatch = tournament.reportMatch
 swissPairings = tournament.swissPairings
 
-
-if __name__ == '__main__':
-    from tournament_demo import *

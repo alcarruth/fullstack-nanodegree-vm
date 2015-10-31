@@ -1,110 +1,94 @@
--- Table definitions for the tournament project.
+-- tournament.sql
+
+-- Author: Al Carruth
+-- Submitted for the Udacity Fullstack Developer Nanodegree
+-- Project 2: Tournament Results
+
+-- Start with a brand new database
+--
+DROP DATABASE IF EXISTS tournament;
+CREATE DATABASE tournament;
+\c tournament
 
 
-create table tournaments (
-       id serial primary key,
-       name text
-       );
+-- table 'tournaments'
+--
+-- Table tournaments is included to enable the multiple tournament
+-- capability.  The methods of the Tournament class in tournament.py
+-- need to qualify their non-multi queries to include 
+-- 'WHERE tournament = %s' % self.id 
+-- (or something similar) to eliminate rows belonging to other
+-- tournaments.  I'd like to make this transparent to the python
+-- tournament instance so that the methods could 'pretend' they
+-- own the database.
+--
+CREATE TABLE tournaments (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL
+    );
 
 
--- table 'players_plus'
+-- table 'players'
 --
--- This table is called 'players_plus' because it is contains
--- all the players _plus_ a dummy player who is a 'born loser'
--- and loses every match he plays.  This additional player has
--- id = 0 and whatever name that given it in tournament.py.
+-- This table contains all the players plus an additional dummy player
+-- who is guaranteed to lose every match he plays.  This additional
+-- player has id = 0 and whatever name given it in tournament.py.
 --
--- All modifications to the roster should be made directly to this
--- this table.  At this time, I believe only the registerPlayer() and
--- deletePlayers() methods modify players_plus.
---
--- In order to read from the roster of players one should select from
--- the view 'players' (see below).
---
-create table players_plus (
-       id serial,
-       name text,
-       tournament integer references tournaments(id),
-       primary key (id, tournament)
-       );
+CREATE TABLE players (
+    id SERIAL,
+    name TEXT NOT NULL,
+    tournament INTEGER REFERENCES tournaments(id),
+    PRIMARY KEY (id, tournament)
+    );
 
 
 -- table 'matches'
 --
--- Table 'matches' contains the outcomes of the matches played.
--- Since (winner, loser) is the primary key, rematches are 
--- automatically rejected by the database.
+-- Table 'matches' contains the outcomes of the matches played.  Since
+-- (winner, loser) is the primary key, rematches are automatically
+-- rejected by the database.
 --
-create table matches (
-       winner integer,
-       loser integer,
-       tournament integer references tournaments(id),
-       foreign key (winner, tournament) references players_plus(id, tournament),
-       foreign key (loser, tournament) references players_plus(id, tournament),
-       primary key (winner, loser, tournament)
-       );
-
-
--- view 'players'
---
--- View 'players' presents a view of players_plus without the
--- dummy bye loser player.  In a sense this is the real roster
--- of players.
--- 
--- Initially we did not have this view and 'players' was a table with
--- no dummy bye loser player.  The problem was that when the loser lost
--- and the match was reported it was rejected because matches(loser)
--- referenced players(id) and there was no player registered with dummy 
--- born loser's id.
---
-create view players as
-       -- * includes tournament
-       select * from players_plus where id>0;
+CREATE TABLE matches (
+    winner INTEGER,
+    loser INTEGER,
+    tournament INTEGER REFERENCES tournaments(id),
+    FOREIGN KEY (winner, tournament) 
+         REFERENCES players(id, tournament) ON DELETE CASCADE,
+    FOREIGN KEY (loser, tournament) 
+         REFERENCES players(id, tournament) ON DELETE CASCADE,
+    PRIMARY KEY (winner, loser, tournament),
+    CHECK (winner <> loser)
+    );
 
 
 -- view 'wins'
 --
--- View 'wins' returns a table of players with their id and 
--- their number of wins BUT only for players with at least one win.
+-- View 'wins' returns a table of players with their id and their
+-- number of wins BUT only for players with at least one win.
 --
--- It's probably only used by the view 'results' below and, if that's
--- the case, the 'order by' clause is superfluous since 'results'
--- does its own ordering.
---
-create view wins as
-       select tournament, winner as id, count(*) as wins 
-       from matches group by tournament, winner
-       order by wins desc;
+CREATE VIEW wins AS
+    SELECT tournament, winner AS id, COUNT(*) AS wins 
+    FROM matches GROUP BY tournament, winner;
 
 
 -- view 'results'
 --
--- View 'results' provides the first three columns of the 
--- 'standings' view, without the 'matches' column.  This
--- view does most of the heavy lifting (for a PostgreSQL
--- novice, anyway).
+-- View 'results' provides the first three columns of the 'standings'
+-- view, without the 'matches' column.  This view does most of the
+-- heavy lifting (for a PostgreSQL novice, anyway).
 
--- The left join ensures that players without a win are included,
--- but only with a value of 'null' for their 'wins' column.
+-- The left join ensures that players without a win are included, but
+-- only with a value of 'null' for their 'wins' column.  The
+-- 'coalesce(wins, 0) as wins' replaces the nulls with 0s.  (Thank you
+-- stackoverflow.com !!)
 --
--- The 'coalesce(wins, 0) as wins' replaces the nulls with 0s.
--- (Thank you stackoverflow.com !!)
---
--- In 'order by wins desc, random()' the 'random()' was added 
--- to shuffle the players within a group and is relied upon
--- by the swissPairings1() method to find a pairing with no
--- rematches.  So repeated queries referencing this view will
--- likely produce different orderings of the players.
---
--- The swissPairings2() method does the shuffling in python
--- and does not rely on this randomness here.
---
-create view results as
-       select players.tournament, players.id, name, coalesce(wins,0) as wins
-       from players left join wins 
-       on players.tournament = wins.tournament
-       and players.id = wins.id
-       order by wins desc, random();
+CREATE VIEW results AS
+    SELECT players.tournament, players.id, name, COALESCE(wins,0) AS wins
+    FROM players LEFT JOIN wins
+    ON players.tournament = wins.tournament
+    AND players.id = wins.id
+    WHERE players.id > 0
+    ORDER BY wins DESC;
 
 
 -- view 'rounds_played'
@@ -114,25 +98,23 @@ create view results as
 -- As far as I know this is only used to provide the 'matches'
 -- field in the 'standings' view (see below).
 --
-create view rounds_played as
-       select tournament, coalesce(max(wins),0) as matches 
-       from wins
-       group by tournament;
+CREATE VIEW rounds_played AS
+    SELECT tournament, COALESCE(MAX(wins),0) AS matches 
+    FROM wins GROUP BY tournament;
 
 
 -- view 'standings'
 --
--- Provides a view suitable for use in the playerStandings()
--- method as specified by the P2 assignment.  The final field
--- 'matches' is the total number of matches played and is the
--- same for all players.
+-- Provides a view suitable for use in the playerStandings() method as
+-- specified by the P2 assignment.  The final field 'matches' is the
+-- total number of matches played and is the same for all players.
 --
--- TODO: whoops!! I just realized that by assuming 'matches'
--- is the same for all players that means standings should
--- not be viewed except _between_ rounds.  Is that a problem?
--- I don't know but I don't like it.
+-- TODO: whoops!! I just realized that by assuming 'matches' is the
+-- same for all players that means standings should not be viewed
+-- except _between_ rounds.  Is that a problem?  I don't know but I
+-- don't like it.
 --
-create view standings as
-       select results.tournament, id, name, wins, coalesce(matches, 0) as matches
-       from results left join rounds_played
-       on results.tournament = rounds_played.tournament;
+CREATE VIEW standings AS
+    SELECT results.tournament, id, name, wins, COALESCE(matches, 0) AS matches
+    FROM results LEFT JOIN rounds_played
+    ON results.tournament = rounds_played.tournament;
