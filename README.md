@@ -1,7 +1,3 @@
-# fullstack-p2-tournament-results
-Udacity Fullstack Nanodegree Project 2
-=======
-
 # Fullstack P2 Tournament Results Project
 
 ## Quick Start
