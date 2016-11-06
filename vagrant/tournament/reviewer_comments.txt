@@ -1,0 +1,96 @@
+
+
+
+tournament.sql
+---------------
+
+SUGGESTION - [DONE]
+
+  - Please consider to declare the player's name as NOT NULL since it
+    is required for the player's name in the registration.
+
+SUGGESTION - [DONE]
+
+  - For a further enhancement on matches' table integrity, please
+    consider to have the following constraints:
+
+    - ON DELETE CASCADE:
+      winner INT REFERENCES players(id) ON DELETE CASCADE,
+      loser INT REFERENCES players(id) ON DELETE CASCADE
+
+    - CHECK constraint to ensure winner is different from the loser:
+      CHECK (winner <> loser)
+
+AWESOME - [QUESTION]
+
+  - Overall, well done for the VIEW build-up to simplify the database
+    query in tournament.py.  
+
+    I believe you could do better in terms of avoiding the necessary
+    VIEW like players since it can be directly retrieved from the
+    table.
+
+  QUESTION: What does this last sentence mean?  Did you mean to
+    write 'unnecessary'?  What do the words 'it' and 'table' refer
+    to exactly?
+
+
+
+tournament.py
+--------------
+
+SUGGESTION - [DONE]
+
+  You can refactor your connect() method to deal not only with the
+  database connection but also with the cursor since you can assign
+  and return multiple variables simultaneously.
+
+  In the stage of setting up the connection with the DB, sometimes you
+  may encounter different exceptions. In practice, this crucial stage
+  should be handled very carefully by using the try/except block
+  similar to the code below.  e.g.
+
+  def connect(database_name="tournament"):
+      try:
+          db = psycopg2.connect("dbname={}".format(database_name))
+          cursor = db.cursor()
+          return db, cursor
+      except:
+          print("<error message>")
+
+SUGGESTION - [NOT DONE]
+
+  Please check the number of players - ensure it's an even number of
+  players.
+
+  RESPONSE: This is not necessary since the program is written to handle
+  an odd number of players.
+
+
+tournament_reset.sql
+----------------------
+
+
+REQUIRED - [DONE]
+
+  Kindly note that the database creation step in missing either in your
+  SQL clauses or the README:
+
+  Please consider to include the SQL clauses as follows:
+
+    DROP DATABASE IF EXISTS tournament;
+    CREATE DATABASE tournament;
+    \c tournament
+
+  DONE. 
+
+    - added the above commands to tournament.sql
+    - tournament_reset.sql removed since it's no longer necessary
+
+
+SUGGESTION - [DONE]
+
+  Please consider to write all the SQL keywords in UPPERCASE, i.e.
+  DROP TABLE CASCADE etc.
+
+  
