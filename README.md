@@ -10,9 +10,9 @@ did !-)
 
 But for the virtual machine case, proceed as follows:
 
-> `$ git clone git@github.com:alcarruth/fullstack-nanodegree-vm.git`
+> `$ git clone git@github.com:alcarruth/fullstack-p2-tournament-results
 >
-> `$ cd fullstack-nanodegree-vm/vagrant`
+> `$ cd fullstack-p2-tournament-results/vagrant`
 >
 > `$ vagrant up`
 >
