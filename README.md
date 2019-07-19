@@ -10,9 +10,9 @@ did !-)
 
 But for the virtual machine case, proceed as follows:
 
-> `$ git clone git@github.com:alcarruth/fullstack-p2-tournament-results
+> `$ git clone git@github.com:alcarruth/tournament-results
 >
-> `$ cd fullstack-p2-tournament-results/vagrant`
+> `$ cd tournament-results/vagrant`
 >
 > `$ vagrant up`
 >
